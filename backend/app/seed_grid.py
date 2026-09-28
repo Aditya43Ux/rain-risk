@@ -23,8 +23,8 @@ def main() -> None:
     step = settings.grid_step
     half = step / 2
 
-    lons = np.arange(west + half, east, step)
-    lats = np.arange(south + half, north, step)
+    lons = np.arange(np.ceil(west / step) * step, east + 1e-9, step)
+    lats = np.arange(np.ceil(south / step) * step, north + 1e-9, step)
 
     rows = []
     for lat in lats:
