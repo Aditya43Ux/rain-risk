@@ -1,0 +1,5 @@
+-r requirements.txt
+scikit-learn>=1.4
+lightgbm>=4.3
+# xgboost>=2.0
+# torch   # only when you try LSTM/Transformer nowcasting

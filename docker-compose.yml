@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: rain
+      POSTGRES_PASSWORD: rain
+      POSTGRES_DB: rain
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # runs once, the first time the volume is created
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+volumes:
+  pgdata:

@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #17233b;
+  --color-ink-soft: #55627a;
+  --color-mist: #f2f6f7;
+  --color-line: #dbe4e8;
+  --color-rain: #2f4a9e;
+}
+
+html, body, #root { height: 100%; }
+body { margin: 0; color: var(--color-ink); background: #fff; }
+
+button:focus-visible { outline: 2px solid var(--color-rain); outline-offset: 2px; }
+.leaflet-container { font-family: inherit; }
