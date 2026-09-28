@@ -84,7 +84,7 @@ def main() -> None:
 
     today = date.today()
     end = args.end or today - timedelta(days=2)  # Late Run needs ~14 h after the day ends
-    start = args.start or end - timedelta(days=9)
+    start = args.start or end - timedelta(days=2)
     if start > end:
         raise SystemExit("--start must be on or before --end")
 
