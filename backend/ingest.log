@@ -1,3 +1,35 @@
 HTTP Request: GET https://ensemble-api.open-meteo.com/v1/ensemble?latitude=21.3750%2C21.3750%2C21.3750%2C21.3750%2C21.3750%2C21.6250%2C21.6250%2C21.6250%2C21.6250%2C21.6250%2C21.8750%2C21.8750%2C21.8750%2C21.8750%2C21.8750%2C22.1250%2C22.1250%2C22.1250%2C22.1250%2C22.1250&longitude=72.6250%2C72.8750%2C73.1250%2C73.3750%2C73.6250%2C72.6250%2C72.8750%2C73.1250%2C73.3750%2C73.6250%2C72.6250%2C72.8750%2C73.1250%2C73.3750%2C73.6250%2C72.6250%2C72.8750%2C73.1250%2C73.3750%2C73.6250&hourly=precipitation&models=ecmwf_ifs025&forecast_days=7&timezone=auto "HTTP/1.1 200 OK"
 cells 1-20 done
 Stored 140 cell-day forecasts for 20 cells.
+===== 01-10-2026  0:53:36.89 ===== 
+===== 01-10-2026  0:55:40.56 ===== 
+HTTP Request: GET https://ensemble-api.open-meteo.com/v1/ensemble?latitude=21.2500%2C21.2500%2C21.2500%2C21.2500%2C21.2500%2C21.2500%2C21.5000%2C21.5000%2C21.5000%2C21.5000%2C21.5000%2C21.5000%2C21.7500%2C21.7500%2C21.7500%2C21.7500%2C21.7500%2C21.7500%2C22.0000%2C22.0000&longitude=72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500&hourly=precipitation&models=ecmwf_ifs025&forecast_days=7&timezone=GMT "HTTP/1.1 200 OK"
+cells 1-20 done
+HTTP Request: GET https://ensemble-api.open-meteo.com/v1/ensemble?latitude=22.0000%2C22.0000%2C22.0000%2C22.0000%2C22.2500%2C22.2500%2C22.2500%2C22.2500%2C22.2500%2C22.2500&longitude=73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500&hourly=precipitation&models=ecmwf_ifs025&forecast_days=7&timezone=GMT "HTTP/1.1 200 OK"
+cells 21-30 done
+Stored 210 cell-day forecasts for 30 cells.
+2026-09-30  avg  15%  max  21%
+2026-10-01  avg  14%  max  25%
+2026-10-02  avg  10%  max  12%
+2026-10-03  avg  11%  max  11%
+2026-10-04  avg  11%  max  11%
+2026-10-05  avg  11%  max  11%
+2026-10-06  avg  12%  max  12%
+2026-10-07  avg  12%  max  16%
+Stored 240 ML rain probabilities (30 cells x 8 days).
+===== 01-10-2026  1:19:13.33 ===== 
+===== 01-10-2026  1:22:01.40 ===== 
+HTTP Request: GET https://ensemble-api.open-meteo.com/v1/ensemble?latitude=21.2500%2C21.2500%2C21.2500%2C21.2500%2C21.2500%2C21.2500%2C21.5000%2C21.5000%2C21.5000%2C21.5000%2C21.5000%2C21.5000%2C21.7500%2C21.7500%2C21.7500%2C21.7500%2C21.7500%2C21.7500%2C22.0000%2C22.0000&longitude=72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500&hourly=precipitation&models=ecmwf_ifs025&forecast_days=7&timezone=GMT "HTTP/1.1 200 OK"
+cells 1-20 done
+HTTP Request: GET https://ensemble-api.open-meteo.com/v1/ensemble?latitude=22.0000%2C22.0000%2C22.0000%2C22.0000%2C22.2500%2C22.2500%2C22.2500%2C22.2500%2C22.2500%2C22.2500&longitude=73.0000%2C73.2500%2C73.5000%2C73.7500%2C72.5000%2C72.7500%2C73.0000%2C73.2500%2C73.5000%2C73.7500&hourly=precipitation&models=ecmwf_ifs025&forecast_days=7&timezone=GMT "HTTP/1.1 200 OK"
+cells 21-30 done
+Stored 210 cell-day forecasts for 30 cells.
+2026-09-30  avg  15%  max  21%
+2026-10-01  avg  14%  max  25%
+2026-10-02  avg  10%  max  12%
+2026-10-03  avg  11%  max  11%
+2026-10-04  avg  11%  max  11%
+2026-10-05  avg  11%  max  11%
+2026-10-06  avg  12%  max  12%
+2026-10-07  avg  12%  max  16%
+Stored 240 ML rain probabilities (30 cells x 8 days).

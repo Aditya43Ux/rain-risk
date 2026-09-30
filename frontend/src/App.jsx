@@ -47,7 +47,7 @@ export default function App() {
   useEffect(() => {
     if (!point || !day || pointError) return
     let stale = false
-    getNearby(point, day, radius).then((d) => !stale && setNearby(d)).catch(() => {})
+    getNearby(point, day, radius).then((d) => !stale && setNearby(d)).catch(() => { })
     return () => { stale = true }
   }, [point, day, radius, pointError])
 
@@ -103,7 +103,7 @@ export default function App() {
         )}
 
         <p className="mt-8 text-xs text-ink-soft">
-          Probabilities are the share of ensemble members that produce rain. They are not yet calibrated against local observations.
+          Probabilities come from a machine-learning model trained on three monsoons of ECMWF forecasts and NASA satellite rainfall. It was tuned for June to September, so treat other months with care.
         </p>
       </aside>
     </div>

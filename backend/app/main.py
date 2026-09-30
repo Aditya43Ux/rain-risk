@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+﻿from contextlib import asynccontextmanager
 from datetime import date
 
 from fastapi import FastAPI, HTTPException, Query
@@ -41,7 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL = {"model": settings.ensemble_model}
+MODEL = {"model": settings.display_model}
 
 
 @app.get("/api/health")
@@ -62,7 +62,7 @@ def meta():
         MODEL,
     )
     return {
-        "model": settings.ensemble_model,
+        "model": settings.display_model,
         "rain_threshold_mm": settings.rain_threshold_mm,
         "dates": [x["valid_date"].isoformat() for x in r],
         "updated_at": r[0]["fetched_at"].isoformat() if r else None,
