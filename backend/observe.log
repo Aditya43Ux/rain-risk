@@ -1,0 +1,12 @@
+===== 01-10-2026 12:42:35.70 ===== 
+You're now authenticated with NASA Earthdata Login
+Granules found: 3
+found 3 daily files for 2026-09-27 to 2026-09-29
+ Getting 3 granules, approx download size: 0.09 GB
+QUEUEING TASKS | :   0%|          | 0/3 [00:00<?, ?it/s]QUEUEING TASKS | : 100%|##########| 3/3 [00:00<00:00, 331.14it/s]
+PROCESSING TASKS | :   0%|          | 0/3 [00:00<?, ?it/s]PROCESSING TASKS | :  33%|###3      | 1/3 [00:17<00:34, 17.26s/it]PROCESSING TASKS | :  67%|######6   | 2/3 [00:19<00:08,  8.56s/it]PROCESSING TASKS | : 100%|##########| 3/3 [00:21<00:00,  5.67s/it]PROCESSING TASKS | : 100%|##########| 3/3 [00:21<00:00,  7.32s/it]
+COLLECTING RESULTS | :   0%|          | 0/3 [00:00<?, ?it/s]COLLECTING RESULTS | : 100%|##########| 3/3 [00:00<?, ?it/s]
+2026-09-27: 30 cells, max 0.0 mm
+2026-09-28: 30 cells, max 0.0 mm
+2026-09-29: 30 cells, max 0.0 mm
+Stored 90 observed cell-days from 3 IMERG files.
