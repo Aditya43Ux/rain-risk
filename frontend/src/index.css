@@ -2,15 +2,56 @@
 
 @theme {
   --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
-  --color-ink: #17233b;
-  --color-ink-soft: #55627a;
-  --color-mist: #f2f6f7;
-  --color-line: #dbe4e8;
-  --color-rain: #2f4a9e;
+  --color-ink: #13303b;
+  --color-ink-soft: #5a6d76;
+  --color-sky: #f4f8fa;
+  --color-mist: #e9f0f3;
+  --color-line: #dbe5ea;
+  --color-rain: #2f5fae;
 }
 
-html, body, #root { height: 100%; }
-body { margin: 0; color: var(--color-ink); background: #fff; }
+html,
+body,
+#root {
+  height: 100%;
+}
 
-button:focus-visible { outline: 2px solid var(--color-rain); outline-offset: 2px; }
-.leaflet-container { font-family: inherit; }
+body {
+  margin: 0;
+  color: var(--color-ink);
+  background: var(--color-sky);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-rain);
+  outline-offset: 2px;
+}
+
+.leaflet-container {
+  font-family: inherit;
+  background: #dfe9ee;
+}
+
+.leaflet-tooltip {
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 0;
+  box-shadow: 0 2px 10px rgb(19 48 59 / 0.15);
+}
+
+/* rain squares fade between days during playback */
+@media (prefers-reduced-motion: no-preference) {
+  .rain-cell {
+    transition: fill 450ms ease, fill-opacity 450ms ease;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="search"]:focus-visible {
+  outline: none;
+}

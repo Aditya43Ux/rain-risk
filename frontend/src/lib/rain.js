@@ -1,4 +1,3 @@
-// One sequential ramp, pale mist to deep indigo. Keep the map and the bars on the same scale.
 export const BINS = [
   { min: 0, color: '#eef3f5', label: '<10%' },
   { min: 10, color: '#d3e4ee', label: '10-19%' },
@@ -9,10 +8,21 @@ export const BINS = [
 ]
 
 export function rainColor(pct) {
-  if (pct == null) return '#cbd5db'
+  if (pct == null) return '#cfd9de'
   let color = BINS[0].color
   for (const b of BINS) if (pct >= b.min) color = b.color
   return color
+}
+
+// Text that sits on a rain colour needs to flip to white on the dark end.
+export const onRainColor = (pct) => (pct != null && pct >= 50 ? '#ffffff' : '#13303b')
+
+export function rainWords(pct) {
+  if (pct == null) return 'No forecast'
+  if (pct < 20) return 'Rain unlikely'
+  if (pct < 50) return 'Rain possible'
+  if (pct < 70) return 'Rain likely'
+  return 'Rain very likely'
 }
 
 export function dayLabel(iso, opts = { weekday: 'short' }) {
@@ -20,5 +30,11 @@ export function dayLabel(iso, opts = { weekday: 'short' }) {
 }
 
 export function mm(v) {
-  return v == null ? 'n/a' : `${Number(v).toFixed(1)} mm`
+  if (v == null) return 'n/a'
+  const n = Number(v)
+  return n < 0.1 ? 'under 0.1 mm' : `${n.toFixed(1)} mm`
+}
+
+export function coords({ lat, lng }) {
+  return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? 'E' : 'W'}`
 }
