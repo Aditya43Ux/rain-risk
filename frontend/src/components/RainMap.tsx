@@ -1,13 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import L from 'leaflet'
 import { Circle, CircleMarker, GeoJSON, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { BINS, mm, rainColor } from '../lib/rain'
+import type { CellFeature, Chance, DayChances, FlyTarget, Grid, LatLng } from '../types'
 
-function tooltipText(c) {
+function tooltipText(c: Chance | undefined): string {
   return c?.pct != null ? `${c.pct}% chance of rain, ${mm(c.mm)} expected` : 'No forecast'
 }
 
-function FitToArea({ geo }) {
+function FitToArea({ geo }: { geo: Grid | null }) {
   const map = useMap()
   const done = useRef(false)
   useEffect(() => {
@@ -18,32 +19,43 @@ function FitToArea({ geo }) {
   return null
 }
 
-function FlyTo({ target }) {
+function FlyTo({ target }: { target: FlyTarget | null }) {
   const map = useMap()
   useEffect(() => {
     if (!target) return
-    if (target.bounds) map.flyToBounds(target.bounds, { padding: [24, 24], duration: 0.8 })
+    if ('bounds' in target) map.flyToBounds(target.bounds, { padding: [24, 24], duration: 0.8 })
     else map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 10), { duration: 0.8 })
   }, [target, map])
   return null
 }
 
-function ClickToPick({ onPick }) {
+function ClickToPick({ onPick }: { onPick: (p: LatLng) => void }) {
   useMapEvents({ click: (e) => onPick({ lat: e.latlng.lat, lng: e.latlng.lng }) })
   return null
 }
 
-export default function RainMap({ geo, chances, point, radiusKm, flyTarget, onPick, children }) {
-  const layerRef = useRef(null)
+interface Props {
+  geo: Grid | null
+  chances: DayChances | undefined
+  point: LatLng | null
+  radiusKm: number
+  flyTarget: FlyTarget | null
+  onPick: (p: LatLng) => void
+  children?: ReactNode
+}
+
+export default function RainMap({ geo, chances, point, radiusKm, flyTarget, onPick, children }: Props) {
+  const layerRef = useRef<L.GeoJSON>(null)
 
   // Recolour the existing squares instead of redrawing them, so playback is smooth.
   useEffect(() => {
     const layer = layerRef.current
     if (!layer || !chances) return
     layer.eachLayer((l) => {
-      const c = chances[l.feature.id]
-      l.setStyle({ fillColor: rainColor(c?.pct) })
-      l.setTooltipContent(tooltipText(c))
+      const path = l as L.Path & { feature: CellFeature }
+      const c = chances[path.feature.id]
+      path.setStyle({ fillColor: rainColor(c?.pct) })
+      path.setTooltipContent(tooltipText(c))
     })
   }, [chances, geo])
 
@@ -60,12 +72,12 @@ export default function RainMap({ geo, chances, point, radiusKm, flyTarget, onPi
             data={geo}
             style={(f) => ({
               className: 'rain-cell',
-              fillColor: rainColor(chances?.[f.id]?.pct),
+              fillColor: rainColor(chances?.[(f as CellFeature).id]?.pct),
               fillOpacity: 0.7,
               color: '#ffffff',
               weight: 1,
             })}
-            onEachFeature={(f, layer) => layer.bindTooltip(tooltipText(chances?.[f.id]), { sticky: true })}
+            onEachFeature={(f: CellFeature, layer) => layer.bindTooltip(tooltipText(chances?.[f.id]), { sticky: true })}
           />
         )}
         {point && (

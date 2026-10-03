@@ -1,6 +1,16 @@
 import { coords, dayLabel, mm, rainColor, rainWords } from '../lib/rain'
+import type { Place, SpotDay } from '../types'
 
-export default function SpotCard({ place, day, today, thresholdMm, error, onShowArea }) {
+interface Props {
+  place: Place
+  day: string
+  today: SpotDay | undefined
+  thresholdMm: number
+  error: string | null
+  onShowArea: () => void
+}
+
+export default function SpotCard({ place, day, today, thresholdMm, error, onShowArea }: Props) {
   if (error) {
     return (
       <div className="rounded-2xl bg-white p-5">

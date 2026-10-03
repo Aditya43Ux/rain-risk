@@ -1,12 +1,21 @@
 import { barColor, mm } from '../lib/rain'
+import type { Compass, NearbyCell, NearbyResponse } from '../types'
 
 const RADII = [10, 25, 50]
-const DIRECTION = { N: 'north', NE: 'north-east', E: 'east', SE: 'south-east', S: 'south', SW: 'south-west', W: 'west', NW: 'north-west' }
+const DIRECTION: Record<Compass, string> = { N: 'north', NE: 'north-east', E: 'east', SE: 'south-east', S: 'south', SW: 'south-west', W: 'west', NW: 'north-west' }
 
-export default function NearbyList({ data, error, radius, onRadius, onPickCell }) {
+interface Props {
+  data: NearbyResponse | null
+  error: string | null
+  radius: number
+  onRadius: (km: number) => void
+  onPickCell: (cell: NearbyCell) => void
+}
+
+export default function NearbyList({ data, error, radius, onRadius, onPickCell }: Props) {
   const cells = data?.cells ?? []
   const others = cells.slice(1)
-  const wettest = others.reduce((m, c) => (c.chance_pct > (m?.chance_pct ?? -1) ? c : m), null)
+  const wettest = others.reduce<NearbyCell | null>((m, c) => ((c.chance_pct ?? -1) > (m?.chance_pct ?? -1) ? c : m), null)
 
   return (
     <section aria-labelledby="nearby-h" className="rounded-2xl bg-white p-5">
@@ -35,7 +44,7 @@ export default function NearbyList({ data, error, radius, onRadius, onPickCell }
       {wettest && (
         <p className="mb-2 text-sm">
           Wettest nearby: <span className="font-semibold">{wettest.chance_pct}%</span>, {wettest.distance_km} km to the{' '}
-          {DIRECTION[wettest.direction] ?? wettest.direction}.
+          {wettest.direction ? DIRECTION[wettest.direction] : 'nearby'}.
         </p>
       )}
 
@@ -51,9 +60,9 @@ export default function NearbyList({ data, error, radius, onRadius, onPickCell }
                 {c.distance_km} km {c.direction}
               </span>
               <span className="h-2 flex-1 overflow-hidden rounded-full bg-mist">
-                <span className="block h-full rounded-full" style={{ width: `${Math.max(c.chance_pct, 2)}%`, background: barColor(c.chance_pct) }} />
+                <span className="block h-full rounded-full" style={{ width: `${Math.max(c.chance_pct ?? 0, 2)}%`, background: barColor(c.chance_pct) }} />
               </span>
-              <span className="tabular w-10 text-right font-medium">{c.chance_pct}%</span>
+              <span className="tabular w-10 text-right font-medium">{c.chance_pct ?? '–'}%</span>
               <span className="tabular hidden w-24 text-right text-ink-soft sm:block">{mm(c.mean_mm)}</span>
             </button>
           </li>

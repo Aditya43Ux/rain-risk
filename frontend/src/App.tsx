@@ -1,19 +1,21 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
-import { getArea, getNearby, getPoint } from './api'
+import type { Polygon } from 'geojson'
+import { ApiError, getArea, getNearby, getPoint } from './api'
 import RainMap from './components/RainMap'
 import SearchBox from './components/SearchBox'
 import Timeline from './components/Timeline'
 import SpotCard from './components/SpotCard'
 import NearbyList from './components/NearbyList'
 import { dayLabel } from './lib/rain'
+import type { AreaMeta, Chance, DayChances, FlyTarget, Grid, LatLng, NearbyResponse, Place, PointResponse, SpotDay } from './types'
 
 // Recharts is most of the bundle and only needed once a spot is picked.
 const WeekChart = lazy(() => import('./components/WeekChart'))
 
 const PLAY_MS = 1300
 
-function centroid(geometry) {
+function centroid(geometry: Polygon): LatLng {
   const ring = geometry.coordinates[0]
   const pts = ring.slice(0, -1)
   const lng = pts.reduce((s, p) => s + p[0], 0) / pts.length
@@ -22,31 +24,31 @@ function centroid(geometry) {
 }
 
 export default function App() {
-  const [meta, setMeta] = useState(null)
-  const [geo, setGeo] = useState(null)
-  const [byDay, setByDay] = useState({})
+  const [meta, setMeta] = useState<AreaMeta | null>(null)
+  const [geo, setGeo] = useState<Grid | null>(null)
+  const [byDay, setByDay] = useState<Record<string, DayChances>>({})
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [place, setPlace] = useState(null)
-  const [series, setSeries] = useState(null)
-  const [pointError, setPointError] = useState(null)
-  const [nearby, setNearby] = useState(null)
-  const [nearbyError, setNearbyError] = useState(null)
+  const [place, setPlace] = useState<Place | null>(null)
+  const [series, setSeries] = useState<PointResponse | null>(null)
+  const [pointError, setPointError] = useState<string | null>(null)
+  const [nearby, setNearby] = useState<NearbyResponse | null>(null)
+  const [nearbyError, setNearbyError] = useState<string | null>(null)
   const [radius, setRadius] = useState(25)
-  const [flyTarget, setFlyTarget] = useState(null)
+  const [flyTarget, setFlyTarget] = useState<FlyTarget | null>(null)
   const [locating, setLocating] = useState(false)
-  const [notice, setNotice] = useState(null)
-  const [error, setError] = useState(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const days = meta?.dates ?? []
-  const day = days[index]
+  const day: string | undefined = days[index]
 
   // One request brings the grid and every day's chances, so playback never waits on the network.
   useEffect(() => {
     getArea()
       .then(({ grid, ...m }) => {
         if (!m.dates.length) throw new Error('No forecast yet. Run "python -m app.predict" in the backend folder.')
-        const all = Object.fromEntries(
+        const all: Record<string, DayChances> = Object.fromEntries(
           m.dates.map((d, i) => [
             d,
             Object.fromEntries(grid.features.map((f) => [f.id, { pct: f.properties.chance_pct[i], mm: f.properties.mean_mm[i] }])),
@@ -56,26 +58,28 @@ export default function App() {
         setByDay(all)
         setMeta(m)
       })
-      .catch((e) => setError(e.message))
+      .catch((e: Error) => setError(e.message))
   }, [])
 
   const centres = useMemo(
-    () => (geo ? Object.fromEntries(geo.features.map((f) => [f.id, centroid(f.geometry)])) : {}),
+    (): Record<number, LatLng> => (geo ? Object.fromEntries(geo.features.map((f) => [f.id, centroid(f.geometry)])) : {}),
     [geo],
   )
 
   // the wettest square in the whole area for each day
   const wettest = useMemo(() => {
-    const out = {}
+    const out: Record<string, (Chance & { id: number; pct: number }) | null> = {}
     for (const [d, cells] of Object.entries(byDay)) {
-      let best = null
-      for (const [id, c] of Object.entries(cells)) if (c.pct != null && (!best || c.pct > best.pct)) best = { id, ...c }
+      let best: (Chance & { id: number; pct: number }) | null = null
+      for (const [id, c] of Object.entries(cells)) {
+        if (c.pct != null && (!best || c.pct > best.pct)) best = { ...c, id: Number(id), pct: c.pct }
+      }
       out[d] = best
     }
     return out
   }, [byDay])
 
-  const pick = useCallback((p, fly = true) => {
+  const pick = useCallback((p: Place, fly = true) => {
     setPlace(p)
     setNearby(null)
     setNearbyError(null)
@@ -88,10 +92,10 @@ export default function App() {
     setPointError(null)
     getPoint(place)
       .then((d) => !stale && setSeries(d))
-      .catch((e) => {
+      .catch((e: Error) => {
         if (stale) return
         setSeries(null)
-        setPointError(e.status === 404 ? 'This spot is outside the forecast area. Rain chances are only available inside the coloured squares.' : e.message)
+        setPointError(e instanceof ApiError && e.status === 404 ? 'This spot is outside the forecast area. Rain chances are only available inside the coloured squares.' : e.message)
       })
     return () => { stale = true }
   }, [place])
@@ -135,25 +139,25 @@ export default function App() {
     if (geo) setFlyTarget({ bounds: L.geoJSON(geo).getBounds() })
   }
 
-  function selectDay(i) {
+  function selectDay(i: number) {
     if (i < 0) return
     setPlaying(false)
     setIndex(i)
   }
 
   const spotByDate = useMemo(
-    () => (series ? Object.fromEntries(series.days.map((d) => [d.date, d])) : {}),
+    (): Record<string, SpotDay> => (series ? Object.fromEntries(series.days.map((d) => [d.date, d])) : {}),
     [series],
   )
-  const today = spotByDate[day]
-  const best = wettest[day]
+  const today = day ? spotByDate[day] : undefined
+  const best = day ? wettest[day] : null
 
   return (
     <div className="flex h-dvh flex-col lg:flex-row">
       <div className="relative h-[46dvh] shrink-0 lg:h-full lg:flex-1">
         <RainMap
           geo={geo}
-          chances={byDay[day]}
+          chances={day ? byDay[day] : undefined}
           point={place}
           radiusKm={radius}
           flyTarget={flyTarget}
@@ -214,7 +218,7 @@ export default function App() {
             </div>
           )}
 
-          {place && (
+          {place && meta && day && (
             <>
               <SpotCard place={place} day={day} today={today} thresholdMm={meta.rain_threshold_mm} error={pointError} onShowArea={showArea} />
               {!pointError && (

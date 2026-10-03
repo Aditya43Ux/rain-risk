@@ -1,6 +1,16 @@
 import { dayLabel, onRainColor, rainColor } from '../lib/rain'
 
-export default function Timeline({ days, index, onIndex, playing, onTogglePlay, valueFor, caption }) {
+interface Props {
+  days: string[]
+  index: number
+  onIndex: (i: number) => void
+  playing: boolean
+  onTogglePlay: () => void
+  valueFor: (day: string) => number | null | undefined
+  caption: string
+}
+
+export default function Timeline({ days, index, onIndex, playing, onTogglePlay, valueFor, caption }: Props) {
   return (
     <section aria-label="Forecast days">
       <div className="mb-2 flex items-center justify-between">

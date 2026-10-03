@@ -5,7 +5,7 @@ A LightGBM model turns ECMWF forecasts into calibrated rain probabilities, train
 satellite rainfall (GPM IMERG).
 
 ```
-Open-Meteo (ECMWF) ──► app.predict ──► PostGIS ──► FastAPI ──► React + Leaflet
+Open-Meteo (ECMWF) ──► app.predict ──► PostGIS ──► FastAPI ──► React + TypeScript
                        (LightGBM)      forecast_daily  /api/...   map, week playback,
 NASA IMERG ──► app.observe_imerg ──►   observation_daily          nearby list, 8-day chart
 Open-Meteo past runs ──► app.backfill_forecasts ──► forecast_hindcast ──► ml.train_model
@@ -89,6 +89,9 @@ All endpoints read only the newest run of `DISPLAY_MODEL` (`lgbm_v1` by default;
 cd backend
 pip install -r requirements-dev.txt
 pytest                       # API tests run against the database and skip if it's down
+
+cd frontend
+npm run typecheck            # strict TypeScript; npm run build also runs it
 ```
 
 ## Layout
@@ -106,7 +109,8 @@ backend/app/migrate.py       applies db/*.sql
 backend/app/seed_grid.py     builds the grid from BBOX and GRID_STEP
 backend/ml/train_model.py    features, training, evaluation
 backend/tests/               pytest suite
-frontend/src/                React app (Leaflet map, Recharts chart, Tailwind v4)
+frontend/src/                React + TypeScript app (Leaflet map, Recharts chart, Tailwind v4)
+frontend/src/types.ts        API response types, mirroring backend/app/main.py
 ```
 
 ## What "chance of rain" means here

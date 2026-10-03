@@ -1,14 +1,21 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { searchPlaces } from '../api'
+import type { PlaceResult } from '../types'
 
-export default function SearchBox({ onSelect, onLocate, locating }) {
+interface Props {
+  onSelect: (place: PlaceResult) => void
+  onLocate: () => void
+  locating: boolean
+}
+
+export default function SearchBox({ onSelect, onLocate, locating }: Props) {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
+  const [results, setResults] = useState<PlaceResult[]>([])
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
-  const [status, setStatus] = useState(null)
+  const [status, setStatus] = useState<string | null>(null)
   const listId = useId()
-  const boxRef = useRef(null)
+  const boxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const q = query.trim()
@@ -18,24 +25,24 @@ export default function SearchBox({ onSelect, onLocate, locating }) {
       setStatus('Searching…')
       searchPlaces(q, ctrl.signal)
         .then((r) => { setResults(r); setActive(-1); setStatus(r.length ? null : `No places called "${q}" found in India.`) })
-        .catch((e) => { if (e.name !== 'AbortError') setStatus(e.message) })
+        .catch((e: Error) => { if (e.name !== 'AbortError') setStatus(e.message) })
     }, 300)
     return () => { clearTimeout(t); ctrl.abort() }
   }, [query])
 
   useEffect(() => {
-    const close = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false) }
+    const close = (e: PointerEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false) }
     document.addEventListener('pointerdown', close)
     return () => document.removeEventListener('pointerdown', close)
   }, [])
 
-  function choose(place) {
+  function choose(place: PlaceResult) {
     onSelect(place)
     setQuery(place.name)
     setOpen(false)
   }
 
-  function onKeyDown(e) {
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((i) => Math.min(i + 1, results.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)) }
     else if (e.key === 'Enter') {
@@ -44,7 +51,7 @@ export default function SearchBox({ onSelect, onLocate, locating }) {
     } else if (e.key === 'Escape') setOpen(false)
   }
 
-  const showList = open && (results.length > 0 || status)
+  const showList = open && (results.length > 0 || status !== null)
 
   return (
     <div ref={boxRef} className="relative w-full">
