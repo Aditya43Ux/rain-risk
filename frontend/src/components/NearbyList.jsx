@@ -1,9 +1,9 @@
-import { mm, rainColor } from '../lib/rain'
+import { barColor, mm } from '../lib/rain'
 
 const RADII = [10, 25, 50]
 const DIRECTION = { N: 'north', NE: 'north-east', E: 'east', SE: 'south-east', S: 'south', SW: 'south-west', W: 'west', NW: 'north-west' }
 
-export default function NearbyList({ data, radius, onRadius, onPickCell }) {
+export default function NearbyList({ data, error, radius, onRadius, onPickCell }) {
   const cells = data?.cells ?? []
   const others = cells.slice(1)
   const wettest = others.reduce((m, c) => (c.chance_pct > (m?.chance_pct ?? -1) ? c : m), null)
@@ -27,7 +27,8 @@ export default function NearbyList({ data, radius, onRadius, onPickCell }) {
         </div>
       </div>
 
-      {!data && <p className="text-sm text-ink-soft">Loading nearby areas…</p>}
+      {error && <p className="text-sm text-ink-soft">{error}</p>}
+      {!data && !error && <p className="text-sm text-ink-soft">Loading nearby areas…</p>}
       {data && others.length === 0 && (
         <p className="text-sm text-ink-soft">No other forecast squares within {radius} km. Try a wider circle.</p>
       )}
@@ -50,7 +51,7 @@ export default function NearbyList({ data, radius, onRadius, onPickCell }) {
                 {c.distance_km} km {c.direction}
               </span>
               <span className="h-2 flex-1 overflow-hidden rounded-full bg-mist">
-                <span className="block h-full rounded-full" style={{ width: `${Math.max(c.chance_pct, 2)}%`, background: rainColor(c.chance_pct) === '#eef3f5' ? '#cfdde4' : rainColor(c.chance_pct) }} />
+                <span className="block h-full rounded-full" style={{ width: `${Math.max(c.chance_pct, 2)}%`, background: barColor(c.chance_pct) }} />
               </span>
               <span className="tabular w-10 text-right font-medium">{c.chance_pct}%</span>
               <span className="tabular hidden w-24 text-right text-ink-soft sm:block">{mm(c.mean_mm)}</span>

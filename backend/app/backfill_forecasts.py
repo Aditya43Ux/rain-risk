@@ -14,10 +14,10 @@ import logging
 import time
 from datetime import date, timedelta
 
-import httpx
 import pandas as pd
 
-from .db import connect
+from .db import connect, grid_cells
+from .openmeteo import complete_daily_sum, get_json
 
 log = logging.getLogger("backfill")
 
@@ -33,20 +33,6 @@ ON CONFLICT (cell_id, valid_date, lead_days, model) DO UPDATE SET precip_mm = EX
 """
 
 
-def get_json(params: dict) -> dict:
-    for attempt in range(5):
-        r = httpx.get(API_URL, params=params, timeout=90)
-        if r.status_code == 429:  # rate limited
-            wait = 30 * 2**attempt
-            log.warning("rate limited, waiting %ds", wait)
-            time.sleep(wait)
-            continue
-        if r.status_code >= 400:
-            raise RuntimeError(f"API error {r.status_code}: {r.text[:300]}")
-        return r.json()
-    raise RuntimeError("Still rate limited. Try again later (the free limit resets daily).")
-
-
 def daily_totals(hourly: dict) -> pd.DataFrame:
     """Hourly precipitation_previous_dayN -> rows of (valid_date, lead_days, precip_mm)."""
     df = pd.DataFrame(hourly)
@@ -56,8 +42,7 @@ def daily_totals(hourly: dict) -> pd.DataFrame:
         col = f"precipitation_previous_day{lead}"
         if col not in df:
             continue
-        g = df.groupby("valid_date")[col]
-        daily = g.sum(min_count=1)[g.count() == 24]  # complete days only
+        daily = complete_daily_sum(df, col).dropna()
         rows.append(pd.DataFrame({"valid_date": daily.index, "lead_days": lead, "precip_mm": daily.values}))
     if not rows:
         return pd.DataFrame(columns=["valid_date", "lead_days", "precip_mm"])
@@ -75,16 +60,15 @@ def main() -> None:
     hourly_vars = ",".join(f"precipitation_previous_day{n}" for n in LEADS)
 
     with connect() as conn:
-        cells = conn.execute("SELECT id, lat, lon FROM grid_cell ORDER BY id").fetchall()
-        if not cells:
-            raise SystemExit("No grid cells yet. Run: python -m app.seed_grid")
+        cells = grid_cells(conn)
 
         total = 0
         chunk_start = args.start
         while chunk_start <= args.end:
             chunk_end = min(chunk_start + timedelta(days=CHUNK_DAYS - 1), args.end)
             for cell in cells:
-                data = get_json(
+                [data] = get_json(
+                    API_URL,
                     {
                         "latitude": cell["lat"],
                         "longitude": cell["lon"],
@@ -93,7 +77,10 @@ def main() -> None:
                         "start_date": chunk_start.isoformat(),
                         "end_date": chunk_end.isoformat(),
                         "timezone": "GMT",
-                    }
+                    },
+                    tries=5,
+                    wait=30,
+                    timeout=90,
                 )
                 df = daily_totals(data["hourly"])
                 rows = [

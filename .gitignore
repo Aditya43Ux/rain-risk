@@ -1,15 +1,18 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 .env
+
+# Node
 node_modules/
 dist/
-*.joblib
 
-imerg_data/
-
-.dodsrc
-
-.dodsrc
-
+# data, models and logs produced by the jobs
 backend/models/
+backend/imerg_data/
+backend/imd_data/
+*.joblib
+*.log
+.dodsrc

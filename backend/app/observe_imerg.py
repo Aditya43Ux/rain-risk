@@ -1,6 +1,6 @@
 """Load observed daily rainfall from NASA GPM IMERG into observation_daily.
 
-    python -m app.observe_imerg                              # last 10 available days
+    python -m app.observe_imerg                              # fill any missing recent days
     python -m app.observe_imerg --start 2026-06-01 --end 2026-09-25
 
 Uses IMERG Late Run daily (GPM_3IMERGDL, V07): 0.1 degree satellite rainfall,
@@ -10,6 +10,9 @@ published about 14 hours after each day ends. A "day" in IMERG is a UTC day
 
 Each 0.1 degree IMERG pixel is assigned to the grid cell whose centre is
 nearest, and the pixels in a cell are averaged.
+
+Without --start, it starts from the first missing day in the last
+MAX_CATCH_UP_DAYS, so a missed or failed run is caught up next time.
 
 Needs a free NASA Earthdata account. The first run asks for your username and
 password and saves them to your home folder, so later runs (and the scheduled
@@ -26,14 +29,16 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .config import settings
+from .config import BACKEND_DIR, settings
 from .db import connect
 
 log = logging.getLogger("observe_imerg")
 
 SHORT_NAME = "GPM_3IMERGDL"  # IMERG Late Run, daily, 0.1 degree
 SOURCE = "imerg_late_v07"
-DOWNLOAD_DIR = Path("imerg_data")
+DOWNLOAD_DIR = BACKEND_DIR / "imerg_data"
+DOWNLOAD_TRIES = 3
+MAX_CATCH_UP_DAYS = 30
 
 UPSERT = """
 INSERT INTO observation_daily (cell_id, obs_date, rain_mm, source)
@@ -66,46 +71,78 @@ def aggregate(ds: xr.Dataset, bbox: tuple[float, float, float, float], step: flo
     df["cell_lat"] = (np.round(df["lat"] / step) * step).round(4)
     df["cell_lon"] = (np.round(df["lon"] / step) * step).round(4)
 
-    out = (
+    return (
         df.groupby(["obs_date", "cell_lat", "cell_lon"])["rain_mm"]
         .agg(rain_mm="mean", n_pixels="count")
         .reset_index()
         .rename(columns={"cell_lat": "lat", "cell_lon": "lon"})
     )
-    return out
+
+
+def readable(path: Path) -> bool:
+    try:
+        with xr.open_dataset(path) as ds:
+            ds["precipitation"].isel(time=0, lat=0, lon=0).load()
+        return True
+    except Exception:  # truncated or corrupt file
+        return False
+
+
+def download(granule) -> Path | None:
+    """Download one granule and check it opens. A broken connection leaves a
+    truncated file that earthaccess would otherwise reuse as "already downloaded"
+    on every later run, so bad files are deleted and fetched again."""
+    path = DOWNLOAD_DIR / granule.data_links()[0].split("/")[-1]
+    for attempt in range(1, DOWNLOAD_TRIES + 1):
+        if path.exists() and readable(path):
+            return path
+        path.unlink(missing_ok=True)
+        try:
+            earthaccess.download([granule], local_path=str(DOWNLOAD_DIR), threads=1)
+        except Exception as e:  # earthaccess re-raises a bare Exception; the cause is logged above it
+            log.warning("%s: download failed (try %d of %d): %s", path.name, attempt, DOWNLOAD_TRIES, e)
+    if path.exists() and readable(path):
+        return path
+    path.unlink(missing_ok=True)
+    log.error("%s: giving up after %d tries", path.name, DOWNLOAD_TRIES)
+    return None
+
+
+def default_start(conn, end: date) -> date | None:
+    """First day in the catch-up window that has no observations yet (None if complete)."""
+    first = end - timedelta(days=MAX_CATCH_UP_DAYS)
+    have = {
+        r["obs_date"]
+        for r in conn.execute(
+            "SELECT DISTINCT obs_date FROM observation_daily WHERE source = %s AND obs_date BETWEEN %s AND %s",
+            (SOURCE, first, end),
+        )
+    }
+    if not have:  # fresh install or a long gap: just the last few days
+        return end - timedelta(days=2)
+    days = (first + timedelta(days=n) for n in range(MAX_CATCH_UP_DAYS + 1))
+    return next((d for d in days if d not in have), None)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--start", type=date.fromisoformat, help="first day (default: 11 days ago)")
+    ap.add_argument("--start", type=date.fromisoformat, help="first day (default: first missing day)")
     ap.add_argument("--end", type=date.fromisoformat, help="last day (default: 2 days ago)")
     ap.add_argument("--keep-files", action="store_true", help="don't delete the downloaded files")
     args = ap.parse_args()
 
-    today = date.today()
-    end = args.end or today - timedelta(days=2)  # Late Run needs ~14 h after the day ends
-    start = args.start or end - timedelta(days=2)
-    if start > end:
-        raise SystemExit("--start must be on or before --end")
-
-    bbox = tuple(float(x) for x in settings.bbox.split(","))
+    end = args.end or date.today() - timedelta(days=2)  # Late Run needs ~14 h after the day ends
+    bbox = settings.bbox_bounds
     step = settings.grid_step
 
-    earthaccess.login(persist=True)
-
-    granules = earthaccess.search_data(
-        short_name=SHORT_NAME,
-        temporal=(start.isoformat(), end.isoformat()),
-        bounding_box=bbox,
-    )
-    if not granules:
-        raise SystemExit(f"No IMERG files found for {start} to {end}. Try an earlier --end date.")
-    log.info("found %d daily files for %s to %s", len(granules), start, end)
-
-    DOWNLOAD_DIR.mkdir(exist_ok=True)
-    files = earthaccess.download(granules, local_path=str(DOWNLOAD_DIR))
-
     with connect() as conn:
+        start = args.start or default_start(conn, end)
+        if start is None:
+            print(f"Already up to date (observations through {end}).")
+            return
+        if start > end:
+            raise SystemExit("--start must be on or before --end")
+
         cells = {
             cell_key(r["lat"], r["lon"]): r["id"]
             for r in conn.execute("SELECT id, lat, lon FROM grid_cell").fetchall()
@@ -113,43 +150,54 @@ def main() -> None:
         if not cells:
             raise SystemExit("No grid cells yet. Run: python -m app.seed_grid")
 
-        total, unmatched = 0, 0
-        for f in sorted(str(x) for x in files):
-            with xr.open_dataset(f) as ds:
-                agg = aggregate(ds, bbox, step)
+        earthaccess.login(persist=True)
+        granules = earthaccess.search_data(
+            short_name=SHORT_NAME,
+            temporal=(start.isoformat(), end.isoformat()),
+            bounding_box=bbox,
+        )
+        if not granules:
+            raise SystemExit(f"No IMERG files found for {start} to {end}. Try an earlier --end date.")
+        log.info("found %d daily files for %s to %s", len(granules), start, end)
 
-            rows = []
-            for r in agg.itertuples(index=False):
-                cell_id = cells.get(cell_key(r.lat, r.lon))
-                if cell_id is None:
-                    unmatched += 1
+        DOWNLOAD_DIR.mkdir(exist_ok=True)
+        total, unmatched, failed = 0, 0, 0
+        try:
+            for granule in granules:
+                path = download(granule)
+                if path is None:
+                    failed += 1
                     continue
-                rows.append(
-                    {
-                        "cell_id": cell_id,
-                        "obs_date": r.obs_date,
-                        "rain_mm": float(r.rain_mm),
-                        "source": SOURCE,
-                    }
-                )
-            with conn.cursor() as cur:
-                cur.executemany(UPSERT, rows)
-            conn.commit()
-            total += len(rows)
-            day = agg["obs_date"].iloc[0] if len(agg) else "?"
-            log.info("%s: %d cells, max %.1f mm", day, len(rows), agg["rain_mm"].max() if len(agg) else 0)
+                with xr.open_dataset(path) as ds:
+                    agg = aggregate(ds, bbox, step)
+
+                rows = []
+                for r in agg.itertuples(index=False):
+                    cell_id = cells.get(cell_key(r.lat, r.lon))
+                    if cell_id is None:
+                        unmatched += 1
+                        continue
+                    rows.append({"cell_id": cell_id, "obs_date": r.obs_date, "rain_mm": float(r.rain_mm), "source": SOURCE})
+                with conn.cursor() as cur:
+                    cur.executemany(UPSERT, rows)
+                conn.commit()
+                total += len(rows)
+                if len(agg):
+                    log.info("%s: %d cells, max %.1f mm", agg["obs_date"].iloc[0], len(rows), agg["rain_mm"].max())
+        finally:
+            if not args.keep_files:
+                shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
 
     if unmatched:
         log.warning(
             "%d cell-days didn't match a grid cell. Is the grid centred on multiples of %s? "
-            "(see step 7b: realign seed_grid.py and reseed)",
+            "(re-run app.seed_grid after changing BBOX or GRID_STEP)",
             unmatched,
             step,
         )
-    if not args.keep_files:
-        shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
-
-    print(f"Stored {total} observed cell-days from {len(files)} IMERG files.")
+    print(f"Stored {total} observed cell-days from {len(granules) - failed} IMERG files.")
+    if failed:
+        raise SystemExit(f"{failed} file(s) could not be downloaded. The next run will retry them.")
 
 
 if __name__ == "__main__":

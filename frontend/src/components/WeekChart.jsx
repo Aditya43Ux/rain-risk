@@ -1,5 +1,5 @@
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { dayLabel, mm, rainColor } from '../lib/rain'
+import { barColor, dayLabel, mm } from '../lib/rain'
 
 export default function WeekChart({ days, selected, onSelect }) {
   const data = days.map((d) => ({ ...d, label: dayLabel(d.date) }))
@@ -20,7 +20,7 @@ export default function WeekChart({ days, selected, onSelect }) {
             {data.map((d) => (
               <Cell
                 key={d.date}
-                fill={rainColor(d.chance_pct) === '#eef3f5' ? '#cfdde4' : rainColor(d.chance_pct)}
+                fill={barColor(d.chance_pct)}
                 stroke={d.date === selected ? '#13303b' : 'none'}
                 strokeWidth={2}
               />

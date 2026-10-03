@@ -1,16 +1,19 @@
 # Rain risk: localized rain-probability maps
 
-Ensemble weather forecasts -> rain probability per grid cell -> map with "what's the chance around me".
+"What's the chance of rain around me?" for every ~25 km grid square in a region, for the next 8 days.
+A LightGBM model turns ECMWF forecasts into calibrated rain probabilities, trained against NASA
+satellite rainfall (GPM IMERG).
 
 ```
-Open-Meteo ensemble API --> ingest.py --> PostGIS --> FastAPI --> React + Leaflet
-(51 ECMWF members)         (pandas)       (grid_cell,  (/api/...)   (map, nearby list,
-                                           forecast_daily)           7-day chart)
+Open-Meteo (ECMWF) ──► app.predict ──► PostGIS ──► FastAPI ──► React + Leaflet
+                       (LightGBM)      forecast_daily  /api/...   map, week playback,
+NASA IMERG ──► app.observe_imerg ──►   observation_daily          nearby list, 8-day chart
+Open-Meteo past runs ──► app.backfill_forecasts ──► forecast_hindcast ──► ml.train_model
 ```
 
 ## Run it
 
-Needs Docker, Python 3.11+, Node 18+.
+Needs Docker, Python 3.10+, Node 18+.
 
 ```bash
 # 1. database (PostGIS)
@@ -21,8 +24,9 @@ cd backend
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env                                    # then edit BBOX to your region
+python -m app.migrate                                   # create/update the schema (safe to re-run)
 python -m app.seed_grid                                 # create the grid cells
-python -m app.ingest                                    # fetch forecasts (takes a minute)
+python -m app.predict                                   # live ML forecast (needs a trained model, below)
 uvicorn app.main:app --reload                           # http://localhost:8000/docs
 
 # 3. frontend (new terminal)
@@ -31,60 +35,92 @@ npm install
 npm run dev                                             # http://localhost:5173
 ```
 
-Click the map to pick a spot. The side panel shows the chance of rain there, the areas
-within 10/25/50 km with direction and distance, and the 7-day outlook.
+Search for a town, use your location or click the map. The side panel shows the chance of rain
+there, the squares within 10/25/50 km with direction and distance, and the week ahead. "Play week"
+animates the map through the days.
 
-If the DB schema changes, reset with `docker compose down -v && docker compose up -d`
-(init.sql only runs when the volume is first created).
+## Train the model
 
-## Check the API by hand
-
-Before trusting the ingest, look at what Open-Meteo actually returns:
+The model learns from past forecasts paired with what actually fell:
 
 ```bash
-curl "https://ensemble-api.open-meteo.com/v1/ensemble?latitude=13&longitude=77.5&hourly=precipitation&models=ecmwf_ifs025&forecast_days=2"
+python -m app.backfill_forecasts --start 2024-06-01 --end 2026-09-23   # past ECMWF runs, lead 1-7 days
+python -m app.observe_imerg --start 2024-06-01 --end 2026-09-23        # NASA IMERG (free Earthdata login)
+python -m ml.train_model                  # evaluate: train on other years, test on 2026
+python -m ml.train_model --final          # train on everything, save models/rain_lgbm.joblib
 ```
 
-You should see `precipitation` plus one `precipitation_memberNN` key per ensemble member.
-`ingest.summarize()` treats every key starting with `precipitation` as a member.
+`ml.train_model` compares the model with climatology, raw ECMWF yes/no and isotonic-calibrated
+ECMWF (the baseline to beat), by lead time and with leave-one-year-out.
 
 ## Keep it fresh
 
-Ingest every 6 hours. Cron example:
+Two jobs, both safe to re-run:
 
-```
-0 */6 * * *  cd /path/to/rain-risk/backend && .venv/bin/python -m app.ingest
+| Job | What | When |
+| --- | --- | --- |
+| `run_ingest.bat` | `app.ingest` (raw 51-member ensemble, archived) then `app.predict` (what the map shows) | every 6 hours |
+| `run_observe.bat` | `app.observe_imerg`: fills any missing IMERG days from the last 30 | daily |
+
+On Windows, register both as hidden scheduled tasks (they run on battery and catch up after sleep):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File backend\register_tasks.ps1
 ```
 
-Every run is stored (see `forecast_daily.fetched_at`); the API reads the `forecast_latest` view.
-Open-Meteo only retains individual ensemble members for a few days, so **this archive is your
-training data**. Start collecting now, even before you build the ML step.
+Elsewhere, cron the same modules, e.g. `0 */6 * * * cd /path/to/backend && .venv/bin/python -m app.predict`.
+Each job appends to `backend/ingest.log` / `backend/observe.log`.
+
+## API
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/forecast/area` | the grid as GeoJSON, each cell with chance and mm for every date (one request feeds the whole map) |
+| `GET /api/forecast/point?lat&lon` | every day for the cell nearest a point (404 outside the grid) |
+| `GET /api/forecast/nearby?lat&lon&day&radius_km` | cells within a radius, nearest first, with distance and compass direction |
+| `GET /api/health` | `{"ok": true}` |
+
+All endpoints read only the newest run of `DISPLAY_MODEL` (`lgbm_v1` by default; set it to
+`ecmwf_ifs025` to show the raw ensemble instead).
+
+## Tests
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest                       # API tests run against the database and skip if it's down
+```
 
 ## Layout
 
 ```
-db/init.sql               PostGIS schema, forecast_latest view, observation table
-backend/app/main.py       API: /api/meta, /api/forecast/{map,nearby,point}
-backend/app/ingest.py     fetch ensemble -> per-cell daily probabilities
-backend/app/seed_grid.py  build the grid from BBOX and GRID_STEP
-backend/ml/calibrate.py   phase 2: isotonic calibration + Brier score
-frontend/src/             React app (Leaflet map, Recharts chart, Tailwind v4)
+db/001_init.sql              grid_cell, forecast_daily, observation_daily
+db/002_hindcast.sql          forecast_hindcast (past forecasts for training)
+backend/app/main.py          API
+backend/app/predict.py       live ML probabilities -> forecast_daily (model lgbm_v1)
+backend/app/ingest.py        raw ensemble probabilities -> forecast_daily (model ecmwf_ifs025)
+backend/app/observe_imerg.py NASA IMERG daily rainfall -> observation_daily
+backend/app/backfill_forecasts.py  past ECMWF runs -> forecast_hindcast
+backend/app/openmeteo.py     shared Open-Meteo request and daily-total helpers
+backend/app/migrate.py       applies db/*.sql
+backend/app/seed_grid.py     builds the grid from BBOX and GRID_STEP
+backend/ml/train_model.py    features, training, evaluation
+backend/tests/               pytest suite
+frontend/src/                React app (Leaflet map, Recharts chart, Tailwind v4)
 ```
 
 ## What "chance of rain" means here
 
-`p_rain` = share of the 51 ensemble members whose daily total is >= `RAIN_THRESHOLD_MM` (default 1 mm)
-in that grid cell. It is raw, not calibrated. The ensemble is ~25 km resolution, so a grid finer
-than 0.25 degrees only interpolates; it does not add real local detail. That comes from phase 2 and 3.
+The probability that at least `RAIN_THRESHOLD_MM` (default 1 mm) falls in that grid square during
+a UTC day (05:30 to 05:30 IST), as predicted by the model from the ECMWF forecast for the square and
+its neighbours, the previous run, and the lead time. ECMWF is ~25 km resolution, so a grid finer
+than 0.25 degrees only interpolates. The model was trained on June to September, so treat other
+months with care.
 
-## Roadmap
+Keep `TIMEZONE=GMT`: IMERG days are UTC days, and the training pairs only line up if the
+forecasts use the same days.
 
-1. **Now:** working map from raw ensemble probabilities.
-2. **Calibrate:** load rainfall observations into `observation_daily` (rain gauges, IMD gridded data,
-   or satellite estimates such as GPM IMERG), then run `ml/calibrate.py`. Apply the saved calibrator in the API.
-3. **Downscale:** LightGBM/XGBoost with inputs like ensemble mean/spread, elevation, distance to coast,
-   month, and lead time, trained on your archive against observations.
-4. **Nowcast (0-6 h):** PyTorch model (ConvLSTM/U-Net) on radar or satellite frames. Only worth it
-   once steps 1 to 3 work and you have radar data access.
-5. **Ship:** Dockerize the API, add caching (forecasts only change every few hours), and show
-   calibrated probabilities with an honest "lower confidence" note for days 5 to 7.
+## Ideas
+
+- **Nowcast (0-6 h):** a ConvLSTM/U-Net on radar or satellite frames, once radar data is available.
+- **Ship:** containerize the API and serve the built frontend behind it.

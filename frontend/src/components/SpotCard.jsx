@@ -1,6 +1,6 @@
 import { coords, dayLabel, mm, rainColor, rainWords } from '../lib/rain'
 
-export default function SpotCard({ place, day, today, error, onShowArea }) {
+export default function SpotCard({ place, day, today, thresholdMm, error, onShowArea }) {
   if (error) {
     return (
       <div className="rounded-2xl bg-white p-5">
@@ -36,7 +36,7 @@ export default function SpotCard({ place, day, today, error, onShowArea }) {
 
         {today && (
           <p className="mt-4 text-sm text-ink-soft">
-            Expected rain {mm(today.mean_mm)}. Chance means at least 1 mm falls in the day.
+            Expected rain {mm(today.mean_mm)}. Chance means at least {thresholdMm} mm falls in the day.
           </p>
         )}
       </div>

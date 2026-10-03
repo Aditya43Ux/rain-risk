@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
-import { getMap, getMeta, getNearby, getPoint } from './api'
+import { getArea, getNearby, getPoint } from './api'
 import RainMap from './components/RainMap'
 import SearchBox from './components/SearchBox'
 import Timeline from './components/Timeline'
 import SpotCard from './components/SpotCard'
 import NearbyList from './components/NearbyList'
-import WeekChart from './components/WeekChart'
 import { dayLabel } from './lib/rain'
+
+// Recharts is most of the bundle and only needed once a spot is picked.
+const WeekChart = lazy(() => import('./components/WeekChart'))
 
 const PLAY_MS = 1300
 
@@ -29,29 +31,28 @@ export default function App() {
   const [series, setSeries] = useState(null)
   const [pointError, setPointError] = useState(null)
   const [nearby, setNearby] = useState(null)
+  const [nearbyError, setNearbyError] = useState(null)
   const [radius, setRadius] = useState(25)
   const [flyTarget, setFlyTarget] = useState(null)
   const [locating, setLocating] = useState(false)
   const [notice, setNotice] = useState(null)
   const [error, setError] = useState(null)
-  const [searchKey, setSearchKey] = useState(0)
 
   const days = meta?.dates ?? []
   const day = days[index]
 
-  // Load every day's map up front so playback never waits on the network.
+  // One request brings the grid and every day's chances, so playback never waits on the network.
   useEffect(() => {
-    getMeta()
-      .then(async (m) => {
-        if (!m.dates.length) throw new Error('No forecast yet. Run "python -m app.ingest" and "python -m app.predict" in the backend folder.')
-        const maps = await Promise.all(m.dates.map((d) => getMap(d)))
-        const all = {}
-        m.dates.forEach((d, i) => {
-          all[d] = Object.fromEntries(
-            maps[i].features.map((f) => [f.id, { pct: f.properties.chance_pct, mm: f.properties.mean_mm }]),
-          )
-        })
-        setGeo(maps.find((fc) => fc.features.length) ?? maps[0])
+    getArea()
+      .then(({ grid, ...m }) => {
+        if (!m.dates.length) throw new Error('No forecast yet. Run "python -m app.predict" in the backend folder.')
+        const all = Object.fromEntries(
+          m.dates.map((d, i) => [
+            d,
+            Object.fromEntries(grid.features.map((f) => [f.id, { pct: f.properties.chance_pct[i], mm: f.properties.mean_mm[i] }])),
+          ]),
+        )
+        setGeo(grid)
         setByDay(all)
         setMeta(m)
       })
@@ -77,6 +78,7 @@ export default function App() {
   const pick = useCallback((p, fly = true) => {
     setPlace(p)
     setNearby(null)
+    setNearbyError(null)
     if (fly) setFlyTarget({ lat: p.lat, lng: p.lng })
   }, [])
 
@@ -97,7 +99,10 @@ export default function App() {
   useEffect(() => {
     if (!place || !day || pointError) return
     let stale = false
-    getNearby(place, day, radius).then((d) => !stale && setNearby(d)).catch(() => { })
+    setNearbyError(null)
+    getNearby(place, day, radius)
+      .then((d) => !stale && setNearby(d))
+      .catch(() => !stale && setNearbyError('Could not load nearby areas. Try again in a moment.'))
     return () => { stale = true }
   }, [place, day, radius, pointError])
 
@@ -131,6 +136,7 @@ export default function App() {
   }
 
   function selectDay(i) {
+    if (i < 0) return
     setPlaying(false)
     setIndex(i)
   }
@@ -210,16 +216,21 @@ export default function App() {
 
           {place && (
             <>
-              <SpotCard place={place} day={day} today={today} error={pointError} onShowArea={showArea} />
+              <SpotCard place={place} day={day} today={today} thresholdMm={meta.rain_threshold_mm} error={pointError} onShowArea={showArea} />
               {!pointError && (
                 <>
                   <NearbyList
                     data={nearby}
+                    error={nearbyError}
                     radius={radius}
                     onRadius={setRadius}
                     onPickCell={(c) => pick({ lat: c.lat, lng: c.lon, name: `${c.distance_km} km ${c.direction} of your spot` })}
                   />
-                  {series && <WeekChart days={series.days} selected={day} onSelect={(d) => selectDay(days.indexOf(d))} />}
+                  {series && (
+                    <Suspense fallback={<div className="h-64 rounded-2xl bg-white" />}>
+                      <WeekChart days={series.days} selected={day} onSelect={(d) => selectDay(days.indexOf(d))} />
+                    </Suspense>
+                  )}
                 </>
               )}
             </>

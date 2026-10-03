@@ -10,8 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # runs once, the first time the volume is created
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # schema: python -m app.migrate (backend folder), re-runnable on any volume
 
 volumes:
   pgdata:

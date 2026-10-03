@@ -2,18 +2,19 @@
 
     python -m app.ingest
 
-Run it every 6 hours (cron / systemd timer / GitHub Action). Each run is kept,
-so you build up a forecast archive for calibration later.
+Raw ensemble probabilities (model ENSEMBLE_MODEL). The map shows the ML model
+(app.predict); these are kept as an archive, since Open-Meteo only holds
+individual ensemble members for a few days.
 """
 import logging
 import time
 from datetime import datetime, timezone
 
-import httpx
 import pandas as pd
 
 from .config import settings
-from .db import connect
+from .db import connect, grid_cells
+from .openmeteo import coords, get_json
 
 log = logging.getLogger("ingest")
 API_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
@@ -29,28 +30,15 @@ ON CONFLICT DO NOTHING
 """
 
 
-def get_json(params: dict) -> dict | list:
-    for attempt in range(4):
-        r = httpx.get(API_URL, params=params, timeout=60)
-        if r.status_code == 429:  # rate limited, back off
-            time.sleep(5 * 2**attempt)
-            continue
-        r.raise_for_status()
-        return r.json()
-    raise RuntimeError("Open-Meteo rate limit hit. Try again later or use fewer cells.")
-
-
 def fetch_batch(cells: list[dict]) -> list[dict]:
     params = {
-        "latitude": ",".join(f"{c['lat']:.4f}" for c in cells),
-        "longitude": ",".join(f"{c['lon']:.4f}" for c in cells),
+        **coords(cells),
         "hourly": "precipitation",
         "models": settings.ensemble_model,
         "forecast_days": 7,
         "timezone": settings.timezone,
     }
-    data = get_json(params)
-    return data if isinstance(data, list) else [data]
+    return get_json(API_URL, params)
 
 
 def summarize(hourly: dict) -> pd.DataFrame:
@@ -86,9 +74,7 @@ def run() -> None:
     fetched_at = datetime.now(timezone.utc).replace(microsecond=0)
 
     with connect() as conn:
-        cells = conn.execute("SELECT id, lat, lon FROM grid_cell ORDER BY id").fetchall()
-        if not cells:
-            raise SystemExit("No grid cells yet. Run: python -m app.seed_grid")
+        cells = grid_cells(conn)
 
         total = 0
         for i in range(0, len(cells), BATCH):
@@ -126,4 +112,5 @@ def run() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     run()

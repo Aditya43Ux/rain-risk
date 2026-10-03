@@ -4,7 +4,7 @@ import { Circle, CircleMarker, GeoJSON, MapContainer, TileLayer, useMap, useMapE
 import { BINS, mm, rainColor } from '../lib/rain'
 
 function tooltipText(c) {
-  return c ? `${c.pct}% chance of rain, ${mm(c.mm)} expected` : 'No forecast'
+  return c?.pct != null ? `${c.pct}% chance of rain, ${mm(c.mm)} expected` : 'No forecast'
 }
 
 function FitToArea({ geo }) {
@@ -49,7 +49,7 @@ export default function RainMap({ geo, chances, point, radiusKm, flyTarget, onPi
 
   return (
     <div className="relative h-full w-full">
-      <MapContainer center={[21.75, 73.1]} zoom={9} className="h-full w-full" zoomControl={false} attributionControl>
+      <MapContainer center={[22, 79]} zoom={5} className="h-full w-full" zoomControl={false} attributionControl>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"

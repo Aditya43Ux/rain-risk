@@ -1,2 +1,3 @@
+Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
-sh.Run """C:\Users\Goku\works\rain-risk\backend\run_observe.bat""", 0, True
+sh.Run """" & fso.GetParentFolderName(WScript.ScriptFullName) & "\run_observe.bat""", 0, True

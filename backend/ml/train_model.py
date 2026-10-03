@@ -1,11 +1,11 @@
-"""Step 9: learn "will it really rain here?" from past ECMWF forecasts + IMERG.
+"""Learn "will it really rain here?" from past ECMWF forecasts + IMERG.
 
     python -m ml.train_model                    # train on 2024-2025, test on 2026
     python -m ml.train_model --features full    # same, also using season + location
     python -m ml.train_model --final            # train on all years and save
 
-Run from the backend folder with the venv active. Needs:
-    python -m pip install lightgbm scikit-learn joblib
+Run from the backend folder with the venv active. Needs forecast_hindcast
+(app.backfill_forecasts) and observation_daily (app.observe_imerg) filled.
 
 Target:  1 if IMERG observed >= RAIN_THRESHOLD_MM in that cell on that UTC day.
 Inputs:  what the forecast said (this cell and its neighbours), how far ahead
@@ -19,7 +19,6 @@ Output:  a probability of rain, compared on the held-out year with
 A leave-one-year-out table at the end checks the result isn't a fluke of 2026.
 """
 import argparse
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -30,10 +29,10 @@ from sklearn.metrics import brier_score_loss, roc_auc_score
 
 import lightgbm as lgb
 
-from app.config import settings
+from app.config import BACKEND_DIR, settings
 from app.db import connect
 
-MODEL_PATH = Path("models/rain_lgbm.joblib")
+MODEL_PATH = BACKEND_DIR / "models" / "rain_lgbm.joblib"
 FORECAST_FEATURES = [
     "precip_mm",        # forecast rain in this cell
     "nbr_mean_mm",      # mean forecast in the 3x3 block around it

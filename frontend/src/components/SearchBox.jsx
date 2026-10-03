@@ -48,7 +48,7 @@ export default function SearchBox({ onSelect, onLocate, locating }) {
 
   return (
     <div ref={boxRef} className="relative w-full">
-      <div className="flex items-center gap-2 rounded-2xl bg-white p-1.5 pl-4    shadow-md ring-1 ring-black/5 focus-within:ring-2 focus-within:ring-rain">
+      <div className="flex items-center gap-2 rounded-2xl bg-white p-1.5 pl-4 shadow-md ring-1 ring-black/5 focus-within:ring-2 focus-within:ring-rain">
         <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 shrink-0 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="9" cy="9" r="6" /><path d="m14 14 4 4" strokeLinecap="round" />
         </svg>

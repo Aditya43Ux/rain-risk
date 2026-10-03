@@ -1,4 +1,4 @@
-"""Live rain probabilities from the trained LightGBM model (step 9b).
+"""Live rain probabilities from the trained LightGBM model.
 
     python -m app.predict
 
@@ -13,7 +13,6 @@ import logging
 import time
 from datetime import datetime, timezone
 
-import httpx
 import joblib
 import numpy as np
 import pandas as pd
@@ -21,7 +20,8 @@ import pandas as pd
 from ml.train_model import MODEL_PATH, add_features
 
 from .config import settings
-from .db import connect
+from .db import connect, grid_cells
+from .openmeteo import complete_daily_sum, coords, get_json
 
 log = logging.getLogger("predict")
 
@@ -41,19 +41,6 @@ ON CONFLICT DO NOTHING
 """
 
 
-def get_json(params: dict) -> list[dict]:
-    for attempt in range(4):
-        r = httpx.get(API_URL, params=params, timeout=60)
-        if r.status_code == 429:
-            time.sleep(10 * 2**attempt)
-            continue
-        if r.status_code >= 400:
-            raise RuntimeError(f"API error {r.status_code}: {r.text[:300]}")
-        data = r.json()
-        return data if isinstance(data, list) else [data]
-    raise RuntimeError("Open-Meteo rate limit hit. Try again later.")
-
-
 def daily(hourly: dict) -> pd.DataFrame:
     """Hourly -> UTC-day totals of the current run and the run one day older."""
     df = pd.DataFrame(hourly)
@@ -61,8 +48,7 @@ def daily(hourly: dict) -> pd.DataFrame:
     out = pd.DataFrame(index=sorted(df["valid_date"].unique()))
     for col, name in (("precipitation", "precip_mm"), ("precipitation_previous_day1", "prev_run_mm")):
         if col in df:
-            g = df.groupby("valid_date")[col]
-            out[name] = g.sum(min_count=1).where(g.count() == 24)  # complete days only
+            out[name] = complete_daily_sum(df, col)
         else:
             out[name] = np.nan
     return out.rename_axis("valid_date").reset_index()
@@ -73,14 +59,15 @@ def fetch(cells: list[dict]) -> pd.DataFrame:
     for i in range(0, len(cells), BATCH):
         batch = cells[i : i + BATCH]
         results = get_json(
+            API_URL,
             {
-                "latitude": ",".join(f"{c['lat']:.4f}" for c in batch),
-                "longitude": ",".join(f"{c['lon']:.4f}" for c in batch),
+                **coords(batch),
                 "hourly": "precipitation,precipitation_previous_day1",
                 "models": SOURCE_MODEL,
                 "forecast_days": FORECAST_DAYS,
                 "timezone": "GMT",
-            }
+            },
+            wait=10,
         )
         if len(results) != len(batch):
             raise RuntimeError(f"Asked for {len(batch)} locations, got {len(results)}")
@@ -121,10 +108,7 @@ def main() -> None:
     today = pd.Timestamp(fetched_at.date())
 
     with connect() as conn:
-        cells = conn.execute("SELECT id, lat, lon FROM grid_cell ORDER BY id").fetchall()
-        if not cells:
-            raise SystemExit("No grid cells yet. Run: python -m app.seed_grid")
-
+        cells = grid_cells(conn)
         fc = build_rows(fetch(cells), today)
         out = predict(fc, bundle)
 

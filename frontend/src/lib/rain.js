@@ -14,6 +14,9 @@ export function rainColor(pct) {
   return color
 }
 
+// Bars and meters sit on white, where the lightest band would vanish.
+export const barColor = (pct) => (pct != null && pct >= BINS[1].min ? rainColor(pct) : '#cfdde4')
+
 // Text that sits on a rain colour needs to flip to white on the dark end.
 export const onRainColor = (pct) => (pct != null && pct >= 50 ? '#ffffff' : '#13303b')
 

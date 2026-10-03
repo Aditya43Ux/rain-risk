@@ -19,7 +19,7 @@ ON CONFLICT (lat, lon) DO NOTHING
 
 
 def main() -> None:
-    west, south, east, north = (float(x) for x in settings.bbox.split(","))
+    west, south, east, north = settings.bbox_bounds
     step = settings.grid_step
     half = step / 2
 

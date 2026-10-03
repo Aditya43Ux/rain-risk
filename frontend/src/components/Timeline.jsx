@@ -34,7 +34,7 @@ export default function Timeline({ days, index, onIndex, playing, onTogglePlay, 
               className={`flex flex-col items-center rounded-xl px-0.5 pb-1.5 pt-2 transition-colors ${active ? 'bg-ink text-white' : 'bg-white hover:bg-mist'}`}
             >
               <span className="text-[11px] leading-none">{dayLabel(d)}</span>
-              <span className="mt-0.5 text-base font-semibold leading-tight">{new Date(`${d}T00:00:00`).getDate()}</span>
+              <span className="mt-0.5 text-base font-semibold leading-tight">{dayLabel(d, { day: 'numeric' })}</span>
               <span
                 className="tabular mt-1 w-full max-w-10 rounded-md py-0.5 text-[11px] font-medium"
                 style={{ background: rainColor(pct), color: onRainColor(pct) }}

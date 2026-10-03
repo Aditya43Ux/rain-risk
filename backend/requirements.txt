@@ -1,7 +1,20 @@
+# API
 fastapi>=0.110
 uvicorn[standard]>=0.29
 psycopg[binary,pool]>=3.1
 pydantic-settings>=2.2
+
+# data jobs: ingest, predict, backfill_forecasts
 httpx>=0.27
 pandas>=2.2
 numpy>=1.26
+
+# ML model: training (ml/train_model.py) and loading it in app.predict
+scikit-learn>=1.4
+lightgbm>=4.3
+joblib>=1.3
+
+# observations: app.observe_imerg (NASA GPM IMERG)
+earthaccess>=0.14
+xarray>=2024.6
+netCDF4>=1.7

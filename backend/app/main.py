@@ -1,14 +1,20 @@
-﻿from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager
 from datetime import date
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from .config import settings
 from .db import pool
 
 COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 KM_PER_DEGREE = 111.0
+
+# Every endpoint reads only the newest run of the display model, so all of them
+# agree on which forecast they show.
+LATEST_RUN = "(SELECT max(fetched_at) FROM forecast_daily WHERE model = %(model)s)"
+MODEL = {"model": settings.display_model}
 
 
 def compass(deg: float | None) -> str | None:
@@ -34,6 +40,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Rain risk API", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
@@ -41,62 +48,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL = {"model": settings.display_model}
-
 
 @app.get("/api/health")
 def health():
     return {"ok": True}
 
 
-@app.get("/api/meta")
-def meta():
-    """Which days are available, what 'rain' means, and how fresh the data is."""
-    r = rows(
-        """
-        SELECT DISTINCT valid_date, fetched_at FROM forecast_daily
-        WHERE model = %(model)s
-          AND fetched_at = (SELECT max(fetched_at) FROM forecast_daily WHERE model = %(model)s)
+@app.get("/api/forecast/area")
+def forecast_area():
+    """Everything the map needs in one response: the grid as GeoJSON polygons,
+    with each cell's rain chance and expected mm for every forecast day.
+
+    properties.chance_pct[i] and properties.mean_mm[i] belong to dates[i].
+    """
+    forecast = rows(
+        f"""
+        SELECT cell_id, valid_date, p_rain, mean_mm, fetched_at
+        FROM forecast_daily
+        WHERE model = %(model)s AND fetched_at = {LATEST_RUN}
         ORDER BY valid_date
         """,
         MODEL,
     )
+    dates = sorted({r["valid_date"] for r in forecast})
+    col = {d: i for i, d in enumerate(dates)}
+    cells = rows("SELECT id, ST_AsGeoJSON(geom, 5)::json AS geometry FROM grid_cell ORDER BY id")
+
+    chance = {c["id"]: [None] * len(dates) for c in cells}
+    amount = {c["id"]: [None] * len(dates) for c in cells}
+    for r in forecast:
+        if r["cell_id"] in chance:
+            chance[r["cell_id"]][col[r["valid_date"]]] = pct(r["p_rain"])
+            amount[r["cell_id"]][col[r["valid_date"]]] = r["mean_mm"]
+
     return {
         "model": settings.display_model,
         "rain_threshold_mm": settings.rain_threshold_mm,
-        "dates": [x["valid_date"].isoformat() for x in r],
-        "updated_at": r[0]["fetched_at"].isoformat() if r else None,
-    }
-
-
-@app.get("/api/forecast/map")
-def forecast_map(day: date):
-    """Every grid cell for one day, as GeoJSON polygons with the rain chance."""
-    r = rows(
-        """
-        SELECT c.id, f.p_rain, f.mean_mm, f.p90_mm,
-               ST_AsGeoJSON(c.geom)::json AS geometry
-        FROM forecast_latest f
-        JOIN grid_cell c ON c.id = f.cell_id
-        WHERE f.valid_date = %(day)s AND f.model = %(model)s
-        """,
-        {"day": day, **MODEL},
-    )
-    return {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "id": x["id"],
-                "geometry": x["geometry"],
-                "properties": {
-                    "chance_pct": pct(x["p_rain"]),
-                    "mean_mm": x["mean_mm"],
-                    "p90_mm": x["p90_mm"],
-                },
-            }
-            for x in r
-        ],
+        "updated_at": forecast[0]["fetched_at"].isoformat() if forecast else None,
+        "dates": [d.isoformat() for d in dates],
+        "grid": {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": c["id"],
+                    "geometry": c["geometry"],
+                    "properties": {"chance_pct": chance[c["id"]], "mean_mm": amount[c["id"]]},
+                }
+                for c in cells
+            ],
+        },
     }
 
 
@@ -109,15 +110,16 @@ def forecast_nearby(
 ):
     """Rain chance for every cell within radius_km of a point, nearest first."""
     r = rows(
-        """
+        f"""
         WITH me AS (SELECT ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326) AS g)
         SELECT c.id, c.lat, c.lon, f.p_rain, f.mean_mm,
                ST_Distance(c.centroid::geography, me.g::geography) / 1000.0 AS km,
                degrees(ST_Azimuth(me.g, c.centroid)) AS bearing
         FROM me, grid_cell c
-        JOIN forecast_latest f ON f.cell_id = c.id
+        JOIN forecast_daily f ON f.cell_id = c.id
         WHERE f.valid_date = %(day)s
           AND f.model = %(model)s
+          AND f.fetched_at = {LATEST_RUN}
           AND ST_DWithin(c.centroid::geography, me.g::geography, %(radius_m)s)
         ORDER BY km
         """,
@@ -163,11 +165,10 @@ def forecast_point(
     cell = nearest[0]
 
     days = rows(
-        """
+        f"""
         SELECT valid_date, p_rain, mean_mm, p90_mm
-        FROM forecast_latest
-        WHERE cell_id = %(id)s AND model = %(model)s
-          AND fetched_at = (SELECT max(fetched_at) FROM forecast_daily WHERE model = %(model)s)
+        FROM forecast_daily
+        WHERE cell_id = %(id)s AND model = %(model)s AND fetched_at = {LATEST_RUN}
         ORDER BY valid_date
         """,
         {"id": cell["id"], **MODEL},
